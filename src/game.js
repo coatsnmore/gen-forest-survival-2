@@ -390,32 +390,64 @@ export class Game {
     }
 
     init() {
-        // Update renderer settings
+        // Update renderer settings first
         this.renderer.setSize(window.innerWidth, window.innerHeight);
         this.renderer.setClearColor(0x88ccff);
-        this.renderer.outputEncoding = THREE.sRGBEncoding;
-        this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        this.renderer.toneMappingExposure = 0.5;
         document.body.appendChild(this.renderer.domElement);
-        
-        // Add this right after creating the scene
+
+        // Set initial camera position and rotation BEFORE creating world
+        this.camera.position.set(0, 2, 5);
+        this.camera.rotation.order = 'YXZ';
+
+        // Setup event listeners for movement and controls
+        window.addEventListener('keydown', (e) => {
+            this.keys[e.key] = true;
+            if (e.key === ' ' && !this.isJumping) {
+                this.verticalVelocity = this.jumpForce;
+                this.isJumping = true;
+            }
+        });
+        window.addEventListener('keyup', (e) => this.keys[e.key] = false);
+        window.addEventListener('resize', () => this.handleResize());
+
+        // Add mouse controls
+        document.addEventListener('mousemove', (e) => this.handleMouseMove(e));
+        document.addEventListener('click', () => {
+            document.body.requestPointerLock();
+        });
+
+        // Add pointer lock change handler
+        document.addEventListener('pointerlockchange', () => {
+            if (!document.pointerLockElement) {
+                this.resetKeys();
+            }
+        });
+
+        // Add mouse click listener for shooting
+        document.addEventListener('mousedown', (e) => {
+            if (e.button === 0 && document.pointerLockElement) { // Left click
+                this.shoot();
+            }
+            if (e.button === 2 && document.pointerLockElement) { // Right click
+                this.isAiming = true;
+            }
+        });
+
+        document.addEventListener('mouseup', (e) => {
+            if (e.button === 2) { // Right click release
+                this.isAiming = false;
+            }
+        });
+
+        // Prevent context menu
+        document.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+        });
+
+        // Create world after camera setup
         this.createSky();
         this.createSun();
-        
-        // Create ground
-        const groundGeometry = new THREE.PlaneGeometry(1000, 1000, 50, 50);
-        const groundMaterial = new THREE.MeshStandardMaterial({ 
-            color: 0x355828,
-            side: THREE.DoubleSide,
-            roughness: 0.8,
-            metalness: 0.1
-        });
-        const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-        ground.rotation.x = Math.PI / 2;
-        ground.receiveShadow = true;
-        this.scene.add(ground);
-
-        // Create objects in correct order (remove duplicates)
+        this.createGround();
         this.createCabins();
         this.spawnWaterTowers();
         this.createCampsites();
@@ -424,27 +456,26 @@ export class Game {
         this.generateTrees(this.treeCount);
         this.createBirds();
         this.createMysticCreatures();
-        
-        // Create gun after camera setup (only once)
         this.createGun();
-        
-        // Enable shadow mapping
-        this.renderer.shadowMap.enabled = true;
-        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-        
-        // Create player shadow
         this.createPlayerShadow();
-
-        // Remove these duplicate calls
-        // this.createBirds();
-        // this.createMysticCreatures();
-        // this.createCabins();
-        // this.createPlayerShadow();
-        // this.createCampsites();
-        // this.spawnChests();
 
         // Start animation loop
         this.animate();
+    }
+
+    createGround() {
+        const groundGeometry = new THREE.PlaneGeometry(1000, 1000, 50, 50);
+        const groundMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0x355828,
+            side: THREE.DoubleSide,
+            roughness: 0.8,
+            metalness: 0.1
+        });
+        const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+        ground.rotation.x = -Math.PI / 2;  // Fixed ground rotation
+        ground.position.y = 0;  // Ensure ground is at y=0
+        ground.receiveShadow = true;
+        this.scene.add(ground);
     }
 
     generateTrees(count) {
