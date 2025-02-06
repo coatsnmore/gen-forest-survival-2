@@ -83,7 +83,43 @@ export class Game {
         this.healthRegenDelay = 5; // Seconds to wait after damage before regen starts
         this.lastDamageTime = 0;
         
+        // Add bear respawn properties
+        this.bearRespawnTime = 5; // Seconds until a bear respawns
+        this.deadBears = []; // Track dead bears for respawning
+        
+        // Add ammo properties
+        this.maxAmmo = 10;
+        this.currentAmmo = this.maxAmmo;
+        this.isReloading = false;
+        this.reloadTime = 2.0; // Seconds to reload
+        
+        // Add reload animation properties
+        this.reloadAnimation = {
+            active: false,
+            startTime: 0,
+            rotationX: 0
+        };
+        
+        // Add stamina properties
+        this.maxStamina = 100;
+        this.currentStamina = this.maxStamina;
+        this.staminaRegenRate = 25; // Points per second
+        this.staminaDrainRate = 30; // Points per second while sprinting
+        this.staminaRegenDelay = 1; // Seconds before stamina starts regenerating
+        this.lastStaminaUse = 0;
+        
+        // Add hunger properties
+        this.maxHunger = 100;
+        this.currentHunger = this.maxHunger;
+        this.hungerDrainRate = 2; // Points per second
+        this.hungerDamageRate = 5; // Damage when starving
+        this.lastHungerDamage = 0;
+        this.hungerDamageInterval = 2; // Seconds between damage when starving
+        
         this.createHealthBar();
+        this.createAmmoBar();
+        this.createStaminaBar();
+        this.createHungerBar();
         this.createDamageOverlay();
         this.createRespawnScreen();
         
@@ -205,6 +241,15 @@ export class Game {
 
         // Create gun after camera setup
         this.createGun();
+
+        // Update reload key listener to work anytime
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'r' || e.key === 'R') {
+                if (!this.isReloading && this.currentAmmo < this.maxAmmo) {
+                    this.reload();
+                }
+            }
+        });
 
         // Start animation loop
         this.animate();
@@ -359,8 +404,8 @@ export class Game {
             return;
         }
 
-        // Handle sprint
-        this.isRunning = this.keys['Shift'];
+        // Handle sprint with stamina check
+        this.isRunning = this.keys['Shift'] && this.currentStamina > 0;
         this.moveSpeed = this.isRunning ? this.sprintSpeed : this.walkSpeed;
         
         // Calculate forward and right vectors
@@ -404,6 +449,20 @@ export class Game {
             this.verticalVelocity = 0;
             this.isJumping = false;
         }
+
+        // Handle stamina drain/regen
+        const time = performance.now() * 0.001;
+        if (this.isRunning && this.moveDirection.length() > 0) {
+            // Drain stamina while sprinting
+            this.currentStamina = Math.max(0, this.currentStamina - this.staminaDrainRate * this.deltaTime);
+            this.lastStaminaUse = time;
+        } else if (time - this.lastStaminaUse > this.staminaRegenDelay) {
+            // Regenerate stamina when not sprinting
+            this.currentStamina = Math.min(this.maxStamina, this.currentStamina + this.staminaRegenRate * this.deltaTime);
+        }
+        
+        // Update stamina bar
+        this.staminaBar.style.width = `${(this.currentStamina / this.maxStamina) * 100}%`;
     }
 
     createSky() {
@@ -812,6 +871,9 @@ export class Game {
 
         // Update health regeneration
         this.updateHealth();
+        
+        // Add hunger update
+        this.updateHunger();
 
         this.renderer.render(this.scene, this.camera);
     }
@@ -838,6 +900,114 @@ export class Game {
 
         healthContainer.appendChild(this.healthBar);
         document.body.appendChild(healthContainer);
+    }
+
+    createAmmoBar() {
+        // Create ammo bar container
+        const ammoContainer = document.createElement('div');
+        ammoContainer.style.position = 'fixed';
+        ammoContainer.style.bottom = '50px';
+        ammoContainer.style.left = '20px';
+        ammoContainer.style.width = '200px';
+        ammoContainer.style.height = '20px';
+        ammoContainer.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+        ammoContainer.style.border = '2px solid #333';
+        ammoContainer.style.borderRadius = '10px';
+
+        // Create ammo bar
+        this.ammoBar = document.createElement('div');
+        this.ammoBar.style.width = '100%';
+        this.ammoBar.style.height = '100%';
+        this.ammoBar.style.backgroundColor = '#c0c0c0';
+        this.ammoBar.style.borderRadius = '8px';
+        this.ammoBar.style.transition = 'width 0.2s';
+
+        ammoContainer.appendChild(this.ammoBar);
+        document.body.appendChild(ammoContainer);
+    }
+
+    createStaminaBar() {
+        // Create stamina bar container
+        const staminaContainer = document.createElement('div');
+        staminaContainer.style.position = 'fixed';
+        staminaContainer.style.bottom = '80px'; // Position above ammo bar
+        staminaContainer.style.left = '20px';
+        staminaContainer.style.width = '200px';
+        staminaContainer.style.height = '20px';
+        staminaContainer.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+        staminaContainer.style.border = '2px solid #333';
+        staminaContainer.style.borderRadius = '10px';
+
+        // Create stamina bar
+        this.staminaBar = document.createElement('div');
+        this.staminaBar.style.width = '100%';
+        this.staminaBar.style.height = '100%';
+        this.staminaBar.style.backgroundColor = '#3498db'; // Blue color
+        this.staminaBar.style.borderRadius = '8px';
+        this.staminaBar.style.transition = 'width 0.2s';
+
+        staminaContainer.appendChild(this.staminaBar);
+        document.body.appendChild(staminaContainer);
+    }
+
+    createHungerBar() {
+        // Create hunger bar container
+        const hungerContainer = document.createElement('div');
+        hungerContainer.style.position = 'fixed';
+        hungerContainer.style.bottom = '110px'; // Position above stamina bar
+        hungerContainer.style.left = '20px';
+        hungerContainer.style.width = '200px';
+        hungerContainer.style.height = '20px';
+        hungerContainer.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+        hungerContainer.style.border = '2px solid #333';
+        hungerContainer.style.borderRadius = '10px';
+
+        // Create hunger bar
+        this.hungerBar = document.createElement('div');
+        this.hungerBar.style.width = '100%';
+        this.hungerBar.style.height = '100%';
+        this.hungerBar.style.backgroundColor = '#8B4513'; // Brown color
+        this.hungerBar.style.borderRadius = '8px';
+        this.hungerBar.style.transition = 'width 0.2s';
+
+        hungerContainer.appendChild(this.hungerBar);
+        document.body.appendChild(hungerContainer);
+    }
+
+    updateAmmoText() {
+        this.ammoText.textContent = `${this.currentAmmo} / ${this.maxAmmo}`;
+    }
+
+    reload() {
+        if (this.isReloading) return;
+        
+        // Allow reload even with full ammo
+        this.isReloading = true;
+        
+        // Start reload animation
+        this.reloadAnimation.active = true;
+        this.reloadAnimation.startTime = performance.now() * 0.001;
+        
+        // Visual feedback - make ammo bar pulse
+        this.ammoBar.style.transition = 'background-color 0.5s';
+        this.ammoBar.style.backgroundColor = '#808080';
+        
+        setTimeout(() => {
+            // Reset ammo
+            this.currentAmmo = this.maxAmmo;
+            
+            // Update ammo bar
+            this.ammoBar.style.width = '100%';
+            this.ammoBar.style.backgroundColor = '#c0c0c0';
+            
+            // Reset reload states
+            this.isReloading = false;
+            
+            // Make sure animation is complete
+            this.reloadAnimation.active = false;
+            this.gun.rotation.x = 0;
+            this.gun.rotation.z = 0;
+        }, this.reloadTime * 1000);
     }
 
     createBears() {
@@ -876,51 +1046,175 @@ export class Game {
         // Clear existing bears
         this.bears.forEach(bear => this.scene.remove(bear));
         this.bears = [];
+        this.deadBears = [];
 
-        // Create bears with updated properties
+        // Create bears with better spacing
         for (let i = 0; i < this.bearCount; i++) {
-            const bear = bearBody.clone();
-            
-            // Make bears bigger and more visible
-            bear.scale.set(2, 2, 2);
-            
-            // Position bears closer to player initially
-            bear.position.set(
-                (Math.random() - 0.5) * 200, // Reduced from 800 to 200
+            this.spawnBear(this.getSpreadOutPosition());
+        }
+    }
+
+    getSpreadOutPosition() {
+        const minDistance = 100; // Minimum distance between bears
+        let position;
+        let attempts = 0;
+        const maxAttempts = 50;
+
+        do {
+            position = new THREE.Vector3(
+                (Math.random() - 0.5) * 800,
                 1.2,
-                (Math.random() - 0.5) * 200  // Reduced from 800 to 200
+                (Math.random() - 0.5) * 800
             );
 
-            // Update bear properties
-            bear.userData = {
-                velocity: new THREE.Vector3(),
-                targetPosition: new THREE.Vector3(),
-                speed: 0.15 + Math.random() * 0.05,
-                updateTime: 0,
-                state: 'wandering',
-                attackCooldown: 0,
-                attackRange: 4,
-                detectionRange: 30,
-                damage: 20,
-                lastAttackTime: 0,
-                health: 3,
-                maxHealth: 3,
-                isHurt: false,
-                attackStage: 'approach',
-                attackDistance: 3,
-                retreatTime: 1.5,
-                retreatDistance: 8,
-                lastStateChange: 0
-            };
+            // Check distance from other bears
+            const isTooClose = this.bears.some(bear => 
+                bear.position.distanceTo(position) < minDistance
+            );
 
-            this.bears.push(bear);
-            this.scene.add(bear);
-        }
+            if (!isTooClose || attempts >= maxAttempts) {
+                return position;
+            }
+            attempts++;
+        } while (true);
+    }
+
+    spawnBear(position) {
+        const bearBody = new THREE.Group();
+        
+        // Bear body - make it more visible
+        const bodyGeometry = new THREE.CapsuleGeometry(0.4, 0.8, 4, 8);
+        const bearMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0x4a3219,
+            roughness: 0.7,
+            metalness: 0.1
+        });
+        const body = new THREE.Mesh(bodyGeometry, bearMaterial);
+        body.rotation.z = Math.PI / 2;
+        bearBody.add(body);
+
+        // Head
+        const headGeometry = new THREE.SphereGeometry(0.3, 8, 8);
+        const head = new THREE.Mesh(headGeometry, bearMaterial);
+        head.position.z = 0.6;
+        head.position.y = 0.2;
+        bearBody.add(head);
+
+        // Ears
+        const earGeometry = new THREE.SphereGeometry(0.1, 4, 4);
+        const earLeft = new THREE.Mesh(earGeometry, bearMaterial);
+        earLeft.position.z = 0.7;
+        earLeft.position.y = 0.5;
+        earLeft.position.x = 0.2;
+        bearBody.add(earLeft);
+
+        const earRight = earLeft.clone();
+        earRight.position.x = -0.2;
+        bearBody.add(earRight);
+
+        const bear = bearBody.clone();
+        bear.scale.set(2, 2, 2);
+        bear.position.copy(position);
+
+        bear.userData = {
+            velocity: new THREE.Vector3(),
+            targetPosition: new THREE.Vector3(),
+            speed: 0.15 + Math.random() * 0.05,
+            updateTime: 0,
+            state: 'wandering',
+            attackCooldown: 0,
+            attackRange: 4,
+            detectionRange: 30,
+            damage: 20,
+            lastAttackTime: 0,
+            health: 3,
+            maxHealth: 3,
+            isHurt: false,
+            attackStage: 'approach',
+            attackDistance: 3,
+            retreatTime: 1.5,
+            retreatDistance: 8,
+            lastStateChange: 0
+        };
+
+        this.bears.push(bear);
+        this.scene.add(bear);
+        return bear;
+    }
+
+    killBear(bear) {
+        // Store death position and original scale
+        const deathPosition = bear.position.clone();
+        const originalScale = bear.scale.clone();
+        
+        // Add to dead bears list with death time and position
+        this.deadBears.push({
+            deathTime: performance.now() * 0.001,
+            position: deathPosition,
+            scale: originalScale
+        });
+
+        // Death animation - fall over
+        const deathAnimation = () => {
+            if (bear.rotation.z < Math.PI / 2) {
+                bear.rotation.z += 0.1;
+                requestAnimationFrame(deathAnimation);
+            } else {
+                // Remove bear after animation
+                setTimeout(() => {
+                    this.scene.remove(bear);
+                    this.bears = this.bears.filter(b => b !== bear);
+                }, 1000);
+            }
+        };
+        deathAnimation();
     }
 
     updateBears() {
         const time = performance.now() * 0.001;
         
+        // Check for bear respawns
+        for (let i = this.deadBears.length - 1; i >= 0; i--) {
+            const deadBear = this.deadBears[i];
+            if (time - deadBear.deathTime >= this.bearRespawnTime) {
+                console.log('Respawning bear...'); // Debug log
+                
+                // Create new bear at death location
+                const bear = this.createBearModel();
+                bear.position.copy(deadBear.position);
+                bear.scale.copy(deadBear.scale);
+                
+                // Initialize bear properties
+                bear.userData = {
+                    velocity: new THREE.Vector3(),
+                    targetPosition: new THREE.Vector3(),
+                    speed: 0.15 + Math.random() * 0.05,
+                    updateTime: 0,
+                    state: 'wandering',
+                    attackCooldown: 0,
+                    attackRange: 4,
+                    detectionRange: 30,
+                    damage: 20,
+                    lastAttackTime: 0,
+                    health: 3,
+                    maxHealth: 3,
+                    isHurt: false,
+                    attackStage: 'approach',
+                    attackDistance: 3,
+                    retreatTime: 1.5,
+                    retreatDistance: 8,
+                    lastStateChange: 0
+                };
+                
+                // Add bear to scene and bears array
+                this.scene.add(bear);
+                this.bears.push(bear);
+                
+                // Remove from dead bears list
+                this.deadBears.splice(i, 1);
+            }
+        }
+
         this.bears.forEach(bear => {
             const data = bear.userData;
             const distanceToPlayer = bear.position.distanceTo(this.camera.position);
@@ -1037,6 +1331,45 @@ export class Game {
                 }
             }
         });
+    }
+
+    createBearModel() {
+        const bearBody = new THREE.Group();
+        
+        // Bear body - make it more visible
+        const bodyGeometry = new THREE.CapsuleGeometry(0.4, 0.8, 4, 8);
+        const bearMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0x4a3219,
+            roughness: 0.7,
+            metalness: 0.1
+        });
+        const body = new THREE.Mesh(bodyGeometry, bearMaterial);
+        body.rotation.z = Math.PI / 2;
+        bearBody.add(body);
+
+        // Head
+        const headGeometry = new THREE.SphereGeometry(0.3, 8, 8);
+        const head = new THREE.Mesh(headGeometry, bearMaterial);
+        head.position.z = 0.6;
+        head.position.y = 0.2;
+        bearBody.add(head);
+
+        // Ears
+        const earGeometry = new THREE.SphereGeometry(0.1, 4, 4);
+        const earLeft = new THREE.Mesh(earGeometry, bearMaterial);
+        earLeft.position.z = 0.7;
+        earLeft.position.y = 0.5;
+        earLeft.position.x = 0.2;
+        bearBody.add(earLeft);
+
+        const earRight = earLeft.clone();
+        earRight.position.x = -0.2;
+        bearBody.add(earRight);
+
+        // Set initial scale
+        bearBody.scale.set(2, 2, 2);
+
+        return bearBody;
     }
 
     createDamageOverlay() {
@@ -1173,11 +1506,21 @@ export class Game {
         // Reset state
         this.isDead = false;
         this.isHurt = false;
+        
+        // Reset hunger
+        this.currentHunger = this.maxHunger;
+        this.hungerBar.style.width = '100%';
     }
 
     shoot() {
         const time = performance.now() * 0.001;
         if (time - this.lastShotTime < this.shootCooldown) return;
+        if (this.isReloading) return;
+        if (this.currentAmmo <= 0) {
+            // Show reload hint when out of ammo
+            this.reloadHint.style.opacity = '1';
+            return;
+        }
         
         // Create bullet
         const bulletGeometry = new THREE.SphereGeometry(0.1, 8, 8);
@@ -1205,6 +1548,16 @@ export class Game {
         this.bullets.push(bullet);
         this.scene.add(bullet);
         this.lastShotTime = time;
+
+        // Update ammo
+        this.currentAmmo--;
+        this.ammoBar.style.width = `${(this.currentAmmo / this.maxAmmo) * 100}%`;
+        this.updateAmmoText();
+        
+        // Show reload hint when low on ammo
+        if (this.currentAmmo <= 5) {
+            this.reloadHint.style.opacity = '1';
+        }
     }
 
     updateBullets() {
@@ -1265,25 +1618,18 @@ export class Game {
         
         // Check for death
         if (bear.userData.health <= 0) {
+            // Restore hunger when killing a bear
+            this.currentHunger = Math.min(this.maxHunger, this.currentHunger + 50);
+            this.hungerBar.style.width = `${(this.currentHunger / this.maxHunger) * 100}%`;
+            
+            // Visual feedback for hunger restoration
+            this.hungerBar.style.boxShadow = '0 0 10px rgba(139, 69, 19, 0.8)';
+            setTimeout(() => {
+                this.hungerBar.style.boxShadow = 'none';
+            }, 300);
+            
             this.killBear(bear);
         }
-    }
-
-    killBear(bear) {
-        // Death animation - fall over
-        const deathAnimation = () => {
-            if (bear.rotation.z < Math.PI / 2) {
-                bear.rotation.z += 0.1;
-                requestAnimationFrame(deathAnimation);
-            } else {
-                // Remove bear after animation
-                setTimeout(() => {
-                    this.scene.remove(bear);
-                    this.bears = this.bears.filter(b => b !== bear);
-                }, 1000);
-            }
-        };
-        deathAnimation();
     }
 
     createHealthPack() {
@@ -1388,6 +1734,10 @@ export class Game {
         setTimeout(() => {
             this.healthBar.style.boxShadow = 'none';
         }, 200);
+        
+        // Restore some hunger when collecting health pack
+        this.currentHunger = Math.min(this.maxHunger, this.currentHunger + this.healthPackValue);
+        this.hungerBar.style.width = `${(this.currentHunger / this.maxHunger) * 100}%`;
     }
 
     createGun() {
@@ -1450,12 +1800,42 @@ export class Game {
                 .applyQuaternion(this.camera.quaternion))
             .add(cameraDirection.multiplyScalar(this.gunRecoil));
         
-        // Match camera rotation
-        this.gun.quaternion.copy(this.camera.quaternion);
+        // Reset gun rotation
+        this.gun.rotation.set(0, 0, 0);
+        
+        // Apply reload animation
+        if (this.reloadAnimation.active) {
+            const time = performance.now() * 0.001;
+            const animationProgress = (time - this.reloadAnimation.startTime) / this.reloadTime;
+            
+            // Only animate if we haven't reached the end of the reload time
+            if (animationProgress <= 1.0) {
+                // Create a more dramatic reload animation
+                const rotationX = Math.sin(animationProgress * Math.PI) * (Math.PI / 2);
+                const rotationZ = Math.sin(animationProgress * Math.PI * 2) * 0.3;
+                
+                this.gun.rotation.x = rotationX;
+                this.gun.rotation.z = rotationZ;
+                
+                // Add a slight downward position offset during reload
+                const verticalOffset = Math.sin(animationProgress * Math.PI) * 0.2;
+                this.gun.position.y -= verticalOffset;
+            } else {
+                // Reset rotations when animation is complete
+                this.gun.rotation.x = 0;
+                this.gun.rotation.z = 0;
+                this.reloadAnimation.active = false;
+            }
+        }
+        
+        // Apply camera rotation after reload animation
+        const cameraRotation = new THREE.Quaternion().setFromEuler(this.camera.rotation);
+        this.gun.quaternion.setFromEuler(this.gun.rotation);
+        this.gun.quaternion.multiply(cameraRotation);
         
         // Apply recoil animation with reduced effect while aiming
         if (this.gunRecoil > 0) {
-            const recoilDamping = this.isAiming ? 0.9 : 0.8; // Less recoil when aiming
+            const recoilDamping = this.isAiming ? 0.9 : 0.8;
             this.gunRecoil *= recoilDamping;
         }
     }
@@ -1478,6 +1858,28 @@ export class Game {
             } else {
                 this.healthBar.style.boxShadow = 'none';
             }
+        }
+    }
+
+    updateHunger() {
+        const time = performance.now() * 0.001;
+        
+        // Drain hunger over time
+        this.currentHunger = Math.max(0, this.currentHunger - this.hungerDrainRate * this.deltaTime);
+        
+        // Update hunger bar
+        this.hungerBar.style.width = `${(this.currentHunger / this.maxHunger) * 100}%`;
+        
+        // Deal damage when starving
+        if (this.currentHunger <= 0 && time - this.lastHungerDamage > this.hungerDamageInterval) {
+            this.takeDamage(this.hungerDamageRate);
+            this.lastHungerDamage = time;
+            
+            // Visual feedback for starvation
+            this.hungerBar.style.boxShadow = '0 0 10px rgba(139, 69, 19, 0.5)';
+            setTimeout(() => {
+                this.hungerBar.style.boxShadow = 'none';
+            }, 200);
         }
     }
 } 
